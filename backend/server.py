@@ -337,11 +337,15 @@ async def get_settings():
     settings = await db.settings.find_one()
     
     if not settings:
-        # Create default settings
+        # Create default settings with default notification times
         settings = {
             "morning_time": "08:00",
             "night_time": "20:00",
             "notifications_enabled": True,
+            "notification_times": [
+                {"id": "morning", "time": "08:00", "label": "Morning", "enabled": True},
+                {"id": "night", "time": "20:00", "label": "Night", "enabled": True}
+            ],
             "current_streak": 0,
             "longest_streak": 0,
             "last_practice_date": None
