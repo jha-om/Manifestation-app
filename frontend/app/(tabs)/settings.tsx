@@ -6,10 +6,14 @@ import {
   TouchableOpacity,
   Switch,
   Platform,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { useAffirmationStore } from '../../store/affirmationStore';
 
@@ -22,19 +26,37 @@ Notifications.setNotificationHandler({
   }),
 });
 
+interface NotificationTime {
+  id: string;
+  time: string;
+  label: string;
+  enabled: boolean;
+}
+
 export default function SettingsScreen() {
   const { settings, fetchSettings, updateSettings } = useAffirmationStore();
   const [loading, setLoading] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationTimes, setNotificationTimes] = useState<NotificationTime[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [selectedTime, setSelectedTime] = useState(new Date());
 
   useEffect(() => {
     loadSettings();
     checkNotificationPermissions();
   }, []);
 
+  useEffect(() => {
+    if (settings) {
+      setNotificationsEnabled(settings.notifications_enabled || false);
+      setNotificationTimes(settings.notification_times || []);
+    }
+  }, [settings]);
+
   const loadSettings = async () => {
     await fetchSettings();
-    setNotificationsEnabled(settings?.notifications_enabled || false);
     setLoading(false);
   };
 
@@ -50,7 +72,7 @@ export default function SettingsScreen() {
       // Request permissions
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
-        alert('Notification permissions are required to set reminders.');
+        Alert.alert('Permission Required', 'Notification permissions are required to set reminders.');
         return;
       }
     }
@@ -59,48 +81,119 @@ export default function SettingsScreen() {
     await updateSettings({ notifications_enabled: value });
 
     if (value) {
-      scheduleNotifications();
+      scheduleAllNotifications();
     } else {
       await Notifications.cancelAllScheduledNotificationsAsync();
     }
   };
 
-  const scheduleNotifications = async () => {
+  const scheduleAllNotifications = async () => {
     // Cancel existing notifications
     await Notifications.cancelAllScheduledNotificationsAsync();
 
-    const morningTime = settings?.morning_time || '08:00';
-    const nightTime = settings?.night_time || '20:00';
+    // Schedule all enabled notification times
+    for (const notifTime of notificationTimes) {
+      if (notifTime.enabled) {
+        const [hour, minute] = notifTime.time.split(':').map(Number);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: `${notifTime.label} Reminder ✨`,
+            body: 'Time for your daily affirmations practice!',
+            sound: true,
+          },
+          trigger: {
+            hour,
+            minute,
+            repeats: true,
+          },
+        });
+      }
+    }
+  };
 
-    // Schedule morning notification
-    const [morningHour, morningMinute] = morningTime.split(':').map(Number);
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Good Morning! 🌅',
-        body: 'Start your day with positive affirmations.',
-        sound: true,
-      },
-      trigger: {
-        hour: morningHour,
-        minute: morningMinute,
-        repeats: true,
-      },
-    });
+  const handleToggleNotificationTime = async (id: string) => {
+    const updatedTimes = notificationTimes.map((nt) =>
+      nt.id === id ? { ...nt, enabled: !nt.enabled } : nt
+    );
+    setNotificationTimes(updatedTimes);
+    await updateSettings({ notification_times: updatedTimes });
+    
+    if (notificationsEnabled) {
+      scheduleAllNotifications();
+    }
+  };
 
-    // Schedule night notification
-    const [nightHour, nightMinute] = nightTime.split(':').map(Number);
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Evening Reflection 🌙',
-        body: 'End your day with gratitude and affirmations.',
-        sound: true,
-      },
-      trigger: {
-        hour: nightHour,
-        minute: nightMinute,
-        repeats: true,
-      },
-    });
+  const handleDeleteNotificationTime = async (id: string) => {
+    Alert.alert(
+      'Delete Notification',
+      'Are you sure you want to delete this notification time?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const updatedTimes = notificationTimes.filter((nt) => nt.id !== id);
+            setNotificationTimes(updatedTimes);
+            await updateSettings({ notification_times: updatedTimes });
+            
+            if (notificationsEnabled) {
+              scheduleAllNotifications();
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAddNotificationTime = () => {
+    if (!newLabel.trim()) {
+      Alert.alert('Error', 'Please enter a label for this notification');
+      return;
+    }
+
+    const hour = selectedTime.getHours().toString().padStart(2, '0');
+    const minute = selectedTime.getMinutes().toString().padStart(2, '0');
+    const timeString = `${hour}:${minute}`;
+
+    const newNotification: NotificationTime = {
+      id: `notif_${Date.now()}`,
+      time: timeString,
+      label: newLabel,
+      enabled: true,
+    };
+
+    const updatedTimes = [...notificationTimes, newNotification];
+    setNotificationTimes(updatedTimes);
+    updateSettings({ notification_times: updatedTimes });
+
+    if (notificationsEnabled) {
+      scheduleAllNotifications();
+    }
+
+    setShowAddModal(false);
+    setNewLabel('');
+    setSelectedTime(new Date());
+  };
+
+  const openAddModal = () => {
+    setNewLabel('');
+    setSelectedTime(new Date());
+    setShowAddModal(true);
+  };
+
+  const onTimeChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || selectedTime;
+    setShowTimePicker(Platform.OS === 'ios');
+    setSelectedTime(currentDate);
+  };
+
+  const formatTime = (time: string) => {
+    const [hour, minute] = time.split(':');
+    const hourNum = parseInt(hour, 10);
+    const ampm = hourNum >= 12 ? 'PM' : 'AM';
+    const hour12 = hourNum % 12 || 12;
+    return `${hour12}:${minute} ${ampm}`;
   };
 
   if (loading) {
@@ -150,22 +243,53 @@ export default function SettingsScreen() {
             {notificationsEnabled && (
               <>
                 <View style={styles.divider} />
-                <View style={styles.timeRow}>
-                  <Ionicons name="sunny" size={24} color="#FFB347" />
-                  <View style={styles.timeInfo}>
-                    <Text style={styles.timeLabel}>Morning</Text>
-                    <Text style={styles.timeValue}>{settings?.morning_time || '08:00'}</Text>
+                
+                {/* Notification Times List */}
+                {notificationTimes.map((notifTime) => (
+                  <View key={notifTime.id}>
+                    <View style={styles.notificationTimeRow}>
+                      <View style={styles.timeContent}>
+                        <Ionicons 
+                          name={notifTime.enabled ? "notifications" : "notifications-off"} 
+                          size={24} 
+                          color={notifTime.enabled ? "#9370DB" : "#CCC"} 
+                        />
+                        <View style={styles.timeInfo}>
+                          <Text style={styles.timeLabel}>{notifTime.label}</Text>
+                          <Text style={styles.timeValue}>{formatTime(notifTime.time)}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.timeActions}>
+                        <TouchableOpacity
+                          onPress={() => handleToggleNotificationTime(notifTime.id)}
+                          style={styles.timeActionButton}
+                        >
+                          <Ionicons 
+                            name={notifTime.enabled ? "checkmark-circle" : "checkmark-circle-outline"} 
+                            size={24} 
+                            color={notifTime.enabled ? "#4CAF50" : "#CCC"} 
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteNotificationTime(notifTime.id)}
+                          style={styles.timeActionButton}
+                        >
+                          <Ionicons name="trash-outline" size={22} color="#FF6B6B" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={styles.divider} />
                   </View>
-                </View>
+                ))}
 
-                <View style={styles.divider} />
-                <View style={styles.timeRow}>
-                  <Ionicons name="moon" size={24} color="#9370DB" />
-                  <View style={styles.timeInfo}>
-                    <Text style={styles.timeLabel}>Night</Text>
-                    <Text style={styles.timeValue}>{settings?.night_time || '20:00'}</Text>
-                  </View>
-                </View>
+                {/* Add Notification Button */}
+                <TouchableOpacity
+                  style={styles.addNotificationButton}
+                  onPress={openAddModal}
+                >
+                  <Ionicons name="add-circle" size={24} color="#9370DB" />
+                  <Text style={styles.addNotificationText}>Add Notification Time</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -243,6 +367,60 @@ export default function SettingsScreen() {
           <Text style={styles.quoteAuthor}>- Buddha</Text>
         </View>
       </ScrollView>
+
+      {/* Add Notification Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Notification</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Ionicons name="close" size={28} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Label (e.g., Afternoon, Bedtime)"
+              value={newLabel}
+              onChangeText={setNewLabel}
+            />
+
+            <TouchableOpacity
+              style={styles.timePickerButton}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Ionicons name="time" size={24} color="#9370DB" />
+              <Text style={styles.timePickerText}>
+                {selectedTime.getHours().toString().padStart(2, '0')}:
+                {selectedTime.getMinutes().toString().padStart(2, '0')}
+              </Text>
+            </TouchableOpacity>
+
+            {showTimePicker && (
+              <DateTimePicker
+                value={selectedTime}
+                mode="time"
+                is24Hour={true}
+                display="default"
+                onChange={onTimeChange}
+              />
+            )}
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleAddNotificationTime}
+            >
+              <Text style={styles.saveButtonText}>Add Notification</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -322,10 +500,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     marginVertical: 16,
   },
-  timeRow: {
+  notificationTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timeContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+    flex: 1,
   },
   timeInfo: {
     flex: 1,
@@ -339,6 +523,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
+  },
+  timeActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timeActionButton: {
+    padding: 4,
+  },
+  addNotificationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  addNotificationText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9370DB',
   },
   statRow: {
     flexDirection: 'row',
@@ -408,5 +611,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999',
     textAlign: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    minHeight: 350,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  input: {
+    backgroundColor: '#F5F0FF',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 16,
+  },
+  timePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F5F0FF',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  timePickerText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#333',
+  },
+  saveButton: {
+    backgroundColor: '#9370DB',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
