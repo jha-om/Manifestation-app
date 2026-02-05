@@ -167,11 +167,18 @@ async def delete_affirmation(affirmation_id: str):
 
 @api_router.post("/affirmations/reorder")
 async def reorder_affirmations(request: ReorderRequest):
-    for index, affirmation_id in enumerate(request.affirmation_ids):
-        await db.affirmations.update_one(
+    # Use bulk write to avoid N+1 query problem
+    operations = [
+        UpdateOne(
             {"_id": ObjectId(affirmation_id)},
             {"$set": {"order": index}}
         )
+        for index, affirmation_id in enumerate(request.affirmation_ids)
+    ]
+    
+    if operations:
+        await db.affirmations.bulk_write(operations)
+    
     return {"message": "Affirmations reordered successfully"}
 
 @api_router.post("/affirmations/seed")
