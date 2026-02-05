@@ -49,6 +49,7 @@ def settings_helper(settings) -> dict:
         "id": str(settings["_id"]),
         "morning_time": settings.get("morning_time", "08:00"),
         "night_time": settings.get("night_time", "20:00"),
+        "notification_times": settings.get("notification_times", []),
         "notifications_enabled": settings.get("notifications_enabled", True),
         "current_streak": settings.get("current_streak", 0),
         "longest_streak": settings.get("longest_streak", 0),
