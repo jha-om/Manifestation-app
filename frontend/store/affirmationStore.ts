@@ -24,6 +24,12 @@ interface Settings {
   morning_time: string;
   night_time: string;
   notifications_enabled: boolean;
+  notification_times: Array<{
+    id: string;
+    time: string;
+    label: string;
+    enabled: boolean;
+  }>;
   current_streak: number;
   longest_streak: number;
   last_practice_date: string | null;
