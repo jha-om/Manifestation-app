@@ -16,6 +16,52 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useAffirmationStore } from '../../store/affirmationStore';
 
+// Separate component for affirmation items to avoid hooks in render functions
+interface AffirmationItemProps {
+  item: any;
+  index: number;
+  onEdit: (affirmation: any) => void;
+  onDelete: (id: string) => void;
+}
+
+function AffirmationItem({ item, index, onEdit, onDelete }: AffirmationItemProps) {
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      delay: index * 50,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  }, [index]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <View style={styles.affirmationCard}>
+        <View style={styles.affirmationContent}>
+          <Ionicons name="star" size={20} color="#FFD700" style={styles.starIcon} />
+          <Text style={styles.affirmationText}>{item.text}</Text>
+        </View>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            onPress={() => onEdit(item)}
+            style={styles.iconButton}
+          >
+            <Ionicons name="create-outline" size={22} color="#9370DB" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => onDelete(item.id)}
+            style={styles.iconButton}
+          >
+            <Ionicons name="trash-outline" size={22} color="#FF6B6B" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function HomeScreen() {
   const { affirmations, fetchAffirmations, addAffirmation, updateAffirmation, deleteAffirmation } = useAffirmationStore();
   const [modalVisible, setModalVisible] = useState(false);
@@ -81,40 +127,13 @@ export default function HomeScreen() {
   };
 
   const renderAffirmationItem = ({ item, index }: any) => {
-    const scaleAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        delay: index * 50,
-        friction: 8,
-        useNativeDriver: true,
-      }).start();
-    }, []);
-
     return (
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <View style={styles.affirmationCard}>
-          <View style={styles.affirmationContent}>
-            <Ionicons name="star" size={20} color="#FFD700" style={styles.starIcon} />
-            <Text style={styles.affirmationText}>{item.text}</Text>
-          </View>
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              onPress={() => handleEditAffirmation(item)}
-              style={styles.iconButton}
-            >
-              <Ionicons name="create-outline" size={22} color="#9370DB" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => handleDeleteAffirmation(item.id)}
-              style={styles.iconButton}
-            >
-              <Ionicons name="trash-outline" size={22} color="#FF6B6B" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Animated.View>
+      <AffirmationItem
+        item={item}
+        index={index}
+        onEdit={handleEditAffirmation}
+        onDelete={handleDeleteAffirmation}
+      />
     );
   };
 
