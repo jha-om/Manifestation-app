@@ -88,15 +88,23 @@ class SettingsUpdate(BaseModel):
     morning_time: Optional[str] = None
     night_time: Optional[str] = None
     notifications_enabled: Optional[bool] = None
+    notification_times: Optional[List[dict]] = None
 
 class SettingsResponse(BaseModel):
     id: str
     morning_time: str
     night_time: str
     notifications_enabled: bool
+    notification_times: List[dict]
     current_streak: int
     longest_streak: int
     last_practice_date: Optional[str] = None
+
+class NotificationTime(BaseModel):
+    id: str
+    time: str
+    label: str
+    enabled: bool
 
 class ReorderRequest(BaseModel):
     affirmation_ids: List[str]
