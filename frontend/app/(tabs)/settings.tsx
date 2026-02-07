@@ -14,11 +14,25 @@ import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { useAffirmationStore } from '../../store/affirmationStore';
 
-// Configure notifications
-Notifications.setNotificationHandler({
+// expo-notifications is not supported in Expo Go (SDK 53+).
+// We lazy-load it and provide a no-op fallback so the rest of
+// the settings screen still works.
+const isExpoGo = Constants.appOwnership === 'expo';
+
+let Notifications: typeof import('expo-notifications') | null = null;
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+  } catch {
+    // remain null – notifications unavailable
+  }
+}
+
+// Configure notifications (only when module is available)
+Notifications?.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
@@ -61,6 +75,10 @@ export default function SettingsScreen() {
   };
 
   const checkNotificationPermissions = async () => {
+    if (!Notifications) {
+      setNotificationsEnabled(false);
+      return;
+    }
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') {
       setNotificationsEnabled(false);
@@ -68,6 +86,14 @@ export default function SettingsScreen() {
   };
 
   const handleToggleNotifications = async (value: boolean) => {
+    if (!Notifications) {
+      Alert.alert(
+        'Not Available',
+        'Push notifications are not supported in Expo Go. Please use a development build.'
+      );
+      return;
+    }
+
     if (value) {
       // Request permissions
       const { status } = await Notifications.requestPermissionsAsync();
@@ -88,6 +114,8 @@ export default function SettingsScreen() {
   };
 
   const scheduleAllNotifications = async () => {
+    if (!Notifications) return;
+
     // Cancel existing notifications
     await Notifications.cancelAllScheduledNotificationsAsync();
 
@@ -117,7 +145,7 @@ export default function SettingsScreen() {
     );
     setNotificationTimes(updatedTimes);
     await updateSettings({ notification_times: updatedTimes });
-    
+
     if (notificationsEnabled) {
       scheduleAllNotifications();
     }
@@ -136,7 +164,7 @@ export default function SettingsScreen() {
             const updatedTimes = notificationTimes.filter((nt) => nt.id !== id);
             setNotificationTimes(updatedTimes);
             await updateSettings({ notification_times: updatedTimes });
-            
+
             if (notificationsEnabled) {
               scheduleAllNotifications();
             }
@@ -207,7 +235,7 @@ export default function SettingsScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Settings</Text>
@@ -243,16 +271,16 @@ export default function SettingsScreen() {
             {notificationsEnabled && (
               <>
                 <View style={styles.divider} />
-                
+
                 {/* Notification Times List */}
                 {notificationTimes.map((notifTime) => (
                   <View key={notifTime.id}>
                     <View style={styles.notificationTimeRow}>
                       <View style={styles.timeContent}>
-                        <Ionicons 
-                          name={notifTime.enabled ? "notifications" : "notifications-off"} 
-                          size={24} 
-                          color={notifTime.enabled ? "#9370DB" : "#CCC"} 
+                        <Ionicons
+                          name={notifTime.enabled ? "notifications" : "notifications-off"}
+                          size={24}
+                          color={notifTime.enabled ? "#9370DB" : "#CCC"}
                         />
                         <View style={styles.timeInfo}>
                           <Text style={styles.timeLabel}>{notifTime.label}</Text>
@@ -264,10 +292,10 @@ export default function SettingsScreen() {
                           onPress={() => handleToggleNotificationTime(notifTime.id)}
                           style={styles.timeActionButton}
                         >
-                          <Ionicons 
-                            name={notifTime.enabled ? "checkmark-circle" : "checkmark-circle-outline"} 
-                            size={24} 
-                            color={notifTime.enabled ? "#4CAF50" : "#CCC"} 
+                          <Ionicons
+                            name={notifTime.enabled ? "checkmark-circle" : "checkmark-circle-outline"}
+                            size={24}
+                            color={notifTime.enabled ? "#4CAF50" : "#CCC"}
                           />
                         </TouchableOpacity>
                         <TouchableOpacity

@@ -25,7 +25,8 @@
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE",
         "CAMERA"
-      ]
+      ],
+      "package": "com.umesh52sahu.frontend"
     },
     "web": {
       "bundler": "metro",
@@ -42,10 +43,17 @@
           "resizeMode": "contain",
           "backgroundColor": "#000"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1ff3ed5b-1da5-4f4d-8d9b-724fb686fa7f"
+      }
     }
   }
 }
