@@ -32,7 +32,8 @@ def affirmation_helper(affirmation) -> dict:
         "text": affirmation["text"],
         "order": affirmation["order"],
         "is_example": affirmation.get("is_example", False),
-        "created_at": affirmation["created_at"]
+        "created_at": affirmation["created_at"],
+        "image": affirmation.get("image", None)
     }
 
 def progress_helper(progress) -> dict:
