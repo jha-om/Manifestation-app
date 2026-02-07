@@ -10,10 +10,12 @@ import {
   Platform,
   Alert,
   Animated,
+  Image,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import * as ImagePicker from 'expo-image-picker';
 import { useAffirmationStore } from '../../store/affirmationStore';
 
 // Separate component for affirmation items to avoid hooks in render functions
@@ -39,6 +41,13 @@ function AffirmationItem({ item, index, onEdit, onDelete }: AffirmationItemProps
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <View style={styles.affirmationCard}>
+        {item.image && (
+          <Image 
+            source={{ uri: item.image }} 
+            style={styles.thumbnailImage}
+            resizeMode="cover"
+          />
+        )}
         <View style={styles.affirmationContent}>
           <Ionicons name="star" size={20} color="#FFD700" style={styles.starIcon} />
           <Text style={styles.affirmationText}>{item.text}</Text>
@@ -67,16 +76,49 @@ export default function HomeScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingAffirmation, setEditingAffirmation] = useState<any>(null);
   const [affirmationText, setAffirmationText] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadAffirmations();
+    requestPermissions();
   }, []);
+
+  const requestPermissions = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'We need camera roll permissions to let you add images to affirmations.');
+    }
+  };
 
   const loadAffirmations = async () => {
     setLoading(true);
     await fetchAffirmations();
     setLoading(false);
+  };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        setSelectedImage(base64Image);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
   };
 
   const handleAddAffirmation = async () => {
@@ -87,12 +129,16 @@ export default function HomeScreen() {
 
     try {
       if (editingAffirmation) {
-        await updateAffirmation(editingAffirmation.id, { text: affirmationText });
+        await updateAffirmation(editingAffirmation.id, { 
+          text: affirmationText,
+          image: selectedImage 
+        });
       } else {
-        await addAffirmation(affirmationText);
+        await addAffirmation(affirmationText, selectedImage || undefined);
       }
       setModalVisible(false);
       setAffirmationText('');
+      setSelectedImage(null);
       setEditingAffirmation(null);
     } catch (error) {
       Alert.alert('Error', 'Failed to save affirmation');
@@ -102,6 +148,7 @@ export default function HomeScreen() {
   const handleEditAffirmation = (affirmation: any) => {
     setEditingAffirmation(affirmation);
     setAffirmationText(affirmation.text);
+    setSelectedImage(affirmation.image || null);
     setModalVisible(true);
   };
 
@@ -123,6 +170,7 @@ export default function HomeScreen() {
   const openAddModal = () => {
     setEditingAffirmation(null);
     setAffirmationText('');
+    setSelectedImage(null);
     setModalVisible(true);
   };
 
@@ -204,6 +252,34 @@ export default function HomeScreen() {
               autoFocus
             />
 
+            {/* Image Section */}
+            <View style={styles.imageSection}>
+              <Text style={styles.imageSectionTitle}>Visualization Image (Optional)</Text>
+              {selectedImage ? (
+                <View style={styles.imagePreviewContainer}>
+                  <Image 
+                    source={{ uri: selectedImage }} 
+                    style={styles.imagePreview}
+                    resizeMode="cover"
+                  />
+                  <TouchableOpacity 
+                    style={styles.removeImageButton}
+                    onPress={removeImage}
+                  >
+                    <Ionicons name="close-circle" size={32} color="#FF6B6B" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+                  <Ionicons name="image-outline" size={40} color="#9370DB" />
+                  <Text style={styles.imagePickerText}>Add Visualization Image</Text>
+                  <Text style={styles.imagePickerSubtext}>
+                    Help manifest your goal with an image
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             <TouchableOpacity style={styles.saveButton} onPress={handleAddAffirmation}>
               <Text style={styles.saveButtonText}>
                 {editingAffirmation ? 'Update' : 'Add'} Affirmation
@@ -265,22 +341,25 @@ const styles = StyleSheet.create({
   },
   affirmationCard: {
     backgroundColor: '#fff',
-    padding: 20,
     borderRadius: 16,
     marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#F0F0F0',
   },
   affirmationContent: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',
+    padding: 20,
+    flex: 1,
   },
   starIcon: {
     marginRight: 12,
@@ -295,7 +374,9 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     gap: 12,
-    marginLeft: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    justifyContent: 'flex-end',
   },
   iconButton: {
     padding: 8,
@@ -337,7 +418,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    minHeight: 300,
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -356,9 +437,55 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     color: '#333',
-    minHeight: 120,
+    minHeight: 100,
     textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  imageSection: {
     marginBottom: 24,
+  },
+  imageSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  imagePickerButton: {
+    backgroundColor: '#F5F0FF',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E6E6FA',
+    borderStyle: 'dashed',
+  },
+  imagePickerText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9370DB',
+    marginTop: 12,
+  },
+  imagePickerSubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 4,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
   },
   saveButton: {
     backgroundColor: '#9370DB',
