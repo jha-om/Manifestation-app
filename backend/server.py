@@ -62,10 +62,12 @@ def settings_helper(settings) -> dict:
 class AffirmationCreate(BaseModel):
     text: str
     order: Optional[int] = None
+    image: Optional[str] = None
 
 class AffirmationUpdate(BaseModel):
     text: Optional[str] = None
     order: Optional[int] = None
+    image: Optional[str] = None
 
 class AffirmationResponse(BaseModel):
     id: str
@@ -73,6 +75,7 @@ class AffirmationResponse(BaseModel):
     order: int
     is_example: bool
     created_at: str
+    image: Optional[str] = None
 
 class DailyProgressCreate(BaseModel):
     date: str
