@@ -8,6 +8,7 @@ interface Affirmation {
   order: number;
   is_example: boolean;
   created_at: string;
+  image?: string | null;
 }
 
 interface DailyProgress {
