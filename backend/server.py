@@ -135,6 +135,7 @@ async def create_affirmation(affirmation: AffirmationCreate):
         "text": affirmation.text,
         "order": affirmation.order if affirmation.order is not None else order,
         "is_example": False,
+        "image": affirmation.image,
         "created_at": datetime.utcnow().isoformat()
     }
     
