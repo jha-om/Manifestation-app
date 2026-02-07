@@ -150,6 +150,15 @@ export default function PracticeScreen() {
               },
             ]}
           >
+            {/* Visualization Image */}
+            {currentAffirmation?.image && (
+              <Image 
+                source={{ uri: currentAffirmation.image }} 
+                style={styles.visualizationImage}
+                resizeMode="cover"
+              />
+            )}
+            
             <View style={styles.quoteIcon}>
               <Ionicons name="flower" size={48} color="#9370DB" />
             </View>
