@@ -310,6 +310,13 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 10,
     marginTop: 32,
+    overflow: 'hidden',
+  },
+  visualizationImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+    marginBottom: 24,
   },
   quoteIcon: {
     marginBottom: 24,
