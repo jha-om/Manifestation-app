@@ -73,12 +73,12 @@ export const useAffirmationStore = create<AffirmationStore>((set, get) => ({
     }
   },
 
-  addAffirmation: async (text: string) => {
+  addAffirmation: async (text: string, image?: string) => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/affirmations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, image }),
       });
       const newAffirmation = await response.json();
       set((state) => ({
@@ -90,7 +90,7 @@ export const useAffirmationStore = create<AffirmationStore>((set, get) => ({
     }
   },
 
-  updateAffirmation: async (id: string, data: { text?: string; order?: number }) => {
+  updateAffirmation: async (id: string, data: { text?: string; order?: number; image?: string }) => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/affirmations/${id}`, {
         method: 'PUT',
