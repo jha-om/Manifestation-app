@@ -10,35 +10,14 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import Constants from 'expo-constants';
 import { useAffirmationStore } from '../../store/affirmationStore';
+import { getNotificationsModule } from '../../utils/notifications';
 
-// expo-notifications is not supported in Expo Go (SDK 53+).
-// We lazy-load it and provide a no-op fallback so the rest of
-// the settings screen still works.
-const isExpoGo = Constants.appOwnership === 'expo';
-
-let Notifications: typeof import('expo-notifications') | null = null;
-if (!isExpoGo) {
-  try {
-    Notifications = require('expo-notifications');
-  } catch {
-    // remain null – notifications unavailable
-  }
-}
-
-// Configure notifications (only when module is available)
-Notifications?.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+let Notifications: any = null;
 
 interface NotificationTime {
   id: string;
@@ -56,10 +35,16 @@ export default function SettingsScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [selectedTime, setSelectedTime] = useState(new Date());
+  const [notificationsReady, setNotificationsReady] = useState(false);
 
   useEffect(() => {
-    loadSettings();
-    checkNotificationPermissions();
+    const init = async () => {
+      Notifications = await getNotificationsModule();
+      setNotificationsReady(!!Notifications);
+      await loadSettings();
+      await checkNotificationPermissions();
+    };
+    init();
   }, []);
 
   useEffect(() => {
@@ -80,6 +65,7 @@ export default function SettingsScreen() {
       return;
     }
     const { status } = await Notifications.getPermissionsAsync();
+    console.log('[Notifications] Current permission status:', status);
     if (status !== 'granted') {
       setNotificationsEnabled(false);
     }
@@ -97,6 +83,7 @@ export default function SettingsScreen() {
     if (value) {
       // Request permissions
       const { status } = await Notifications.requestPermissionsAsync();
+      console.log('[Notifications] Permission request result:', status);
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Notification permissions are required to set reminders.');
         return;
@@ -107,36 +94,64 @@ export default function SettingsScreen() {
     await updateSettings({ notifications_enabled: value });
 
     if (value) {
-      scheduleAllNotifications();
+      // Pass current times directly to avoid stale state
+      await scheduleAllNotifications(notificationTimes);
     } else {
       await Notifications.cancelAllScheduledNotificationsAsync();
     }
   };
 
-  const scheduleAllNotifications = async () => {
-    if (!Notifications) return;
+  const scheduleAllNotifications = async (timesToSchedule?: NotificationTime[]) => {
+    if (!Notifications) {
+      console.log('[Notifications] Module not available, skipping schedule');
+      return;
+    }
+
+    const times = timesToSchedule || notificationTimes;
 
     // Cancel existing notifications
     await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log('[Notifications] Cancelled all existing notifications');
 
     // Schedule all enabled notification times
-    for (const notifTime of notificationTimes) {
+    for (const notifTime of times) {
       if (notifTime.enabled) {
         const [hour, minute] = notifTime.time.split(':').map(Number);
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `${notifTime.label} Reminder ✨`,
-            body: 'Time for your daily affirmations practice!',
-            sound: true,
-          },
-          trigger: {
+
+        try {
+          const trigger: any = {
+            type: Notifications.SchedulableTriggerInputTypes?.DAILY ?? 'daily',
             hour,
             minute,
-            repeats: true,
-          },
-        });
+          };
+
+          // Add channelId to trigger for Android
+          if (Platform.OS === 'android') {
+            trigger.channelId = 'daily-reminders';
+          }
+
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `${notifTime.label} Reminder ✨`,
+              body: 'Time for your daily affirmations practice!',
+              sound: 'default',
+              priority: Platform.OS === 'android'
+                ? (Notifications.AndroidNotificationPriority?.HIGH ?? 'high')
+                : undefined,
+            },
+            trigger,
+          });
+
+          console.log(`[Notifications] Scheduled "${notifTime.label}" at ${hour}:${minute}, id: ${id}`);
+        } catch (error) {
+          console.error(`[Notifications] Failed to schedule "${notifTime.label}":`, error);
+        }
       }
     }
+
+    // Log all scheduled notifications for debugging
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    console.log(`[Notifications] Total scheduled: ${scheduled.length}`, JSON.stringify(scheduled, null, 2));
   };
 
   const handleToggleNotificationTime = async (id: string) => {
@@ -147,7 +162,7 @@ export default function SettingsScreen() {
     await updateSettings({ notification_times: updatedTimes });
 
     if (notificationsEnabled) {
-      scheduleAllNotifications();
+      await scheduleAllNotifications(updatedTimes);
     }
   };
 
@@ -166,7 +181,7 @@ export default function SettingsScreen() {
             await updateSettings({ notification_times: updatedTimes });
 
             if (notificationsEnabled) {
-              scheduleAllNotifications();
+              await scheduleAllNotifications(updatedTimes);
             }
           },
         },
@@ -174,7 +189,7 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleAddNotificationTime = () => {
+  const handleAddNotificationTime = async () => {
     if (!newLabel.trim()) {
       Alert.alert('Error', 'Please enter a label for this notification');
       return;
@@ -193,10 +208,10 @@ export default function SettingsScreen() {
 
     const updatedTimes = [...notificationTimes, newNotification];
     setNotificationTimes(updatedTimes);
-    updateSettings({ notification_times: updatedTimes });
+    await updateSettings({ notification_times: updatedTimes });
 
     if (notificationsEnabled) {
-      scheduleAllNotifications();
+      await scheduleAllNotifications(updatedTimes);
     }
 
     setShowAddModal(false);
@@ -387,10 +402,10 @@ export default function SettingsScreen() {
 
         {/* Inspirational Quote */}
         <View style={styles.quoteCard}>
-          <Ionicons name="quote" size={32} color="#9370DB" />
+          <Ionicons name="chatbubble-outline" size={32} color="#9370DB" />
           <Text style={styles.quoteText}>
-            "What you think, you become. What you feel, you attract.
-            What you imagine, you create."
+            &quot;What you think, you become. What you feel, you attract.
+            What you imagine, you create.&quot;
           </Text>
           <Text style={styles.quoteAuthor}>- Buddha</Text>
         </View>
