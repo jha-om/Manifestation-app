@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Add visualization images to your affirmations",
         "NSCameraUsageDescription": "Take photos for your affirmations"
-      }
+      },
+      "bundleIdentifier": "com.umesh52sahu.frontend"
     },
     "android": {
       "adaptiveIcon": {

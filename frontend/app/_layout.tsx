@@ -11,25 +11,11 @@ export default function RootLayout() {
       try {
         const Notifications = await getNotificationsModule();
         if (!Notifications) {
-          console.log('[RootLayout] Notifications module not available');
+          console.log('[RootLayout] Notifications module not available, skipping setup');
           return;
         }
 
-        // Create Android notification channel FIRST (required for Android 8+)
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('daily-reminders', {
-            name: 'Daily Reminders',
-            importance: Notifications.AndroidImportance.HIGH,
-            vibrationPattern: [0, 250, 250, 250],
-            sound: 'default',
-            lockscreenVisibility: Notifications.AndroidNotificationVisibility?.PUBLIC,
-            enableVibrate: true,
-            showBadge: true,
-          });
-          console.log('[RootLayout] Notification channel "daily-reminders" created');
-        }
-
-        // Configure how notifications are displayed when app is in foreground
+        // CRITICAL: Set notification handler FIRST — without this, foreground notifications are suppressed
         Notifications.setNotificationHandler({
           handleNotification: async () => ({
             shouldShowAlert: true,
@@ -39,8 +25,21 @@ export default function RootLayout() {
             shouldShowList: true,
           }),
         });
-
         console.log('[RootLayout] Notification handler set');
+
+        // CRITICAL: Create Android notification channel (required for Android 8+)
+        // Without this, notifications are silently dropped
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('daily-reminders', {
+            name: 'Daily Reminders',
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+            sound: 'default',
+            enableVibrate: true,
+            showBadge: true,
+          });
+          console.log('[RootLayout] Android notification channel "daily-reminders" created');
+        }
       } catch (error) {
         console.error('[RootLayout] Failed to setup notifications:', error);
       }
@@ -55,12 +54,9 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#F5F0FF' },
+          contentStyle: { backgroundColor: '#0a0a1a' },
         }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(tabs)" />
-      </Stack>
+      />
     </GestureHandlerRootView>
   );
 }

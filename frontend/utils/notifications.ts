@@ -1,7 +1,12 @@
 import Constants from 'expo-constants';
 
+/**
+ * Safely loads expo-notifications.
+ * Returns null in Expo Go (where the module was removed in SDK 53+)
+ * and in any environment where the native module isn't available.
+ */
 export async function getNotificationsModule(): Promise<typeof import('expo-notifications') | null> {
-    // Only block in Expo Go — standalone/dev builds should proceed
+    // Only block in Expo Go — standalone/dev builds should always proceed
     const isExpoGo = Constants.appOwnership === 'expo';
     if (isExpoGo) {
         console.log('[Notifications] Running in Expo Go — notifications disabled');

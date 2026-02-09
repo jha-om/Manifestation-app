@@ -10,7 +10,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -41,6 +41,11 @@ export default function SettingsScreen() {
     const init = async () => {
       Notifications = await getNotificationsModule();
       setNotificationsReady(!!Notifications);
+      if (Notifications) {
+        console.log('[Settings] Notifications module loaded');
+      } else {
+        console.log('[Settings] Notifications module NOT available');
+      }
       await loadSettings();
       await checkNotificationPermissions();
     };
@@ -65,7 +70,7 @@ export default function SettingsScreen() {
       return;
     }
     const { status } = await Notifications.getPermissionsAsync();
-    console.log('[Notifications] Current permission status:', status);
+    console.log('[Settings] Current permission status:', status);
     if (status !== 'granted') {
       setNotificationsEnabled(false);
     }
@@ -81,9 +86,8 @@ export default function SettingsScreen() {
     }
 
     if (value) {
-      // Request permissions
       const { status } = await Notifications.requestPermissionsAsync();
-      console.log('[Notifications] Permission request result:', status);
+      console.log('[Settings] Permission request result:', status);
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Notification permissions are required to set reminders.');
         return;
@@ -94,64 +98,67 @@ export default function SettingsScreen() {
     await updateSettings({ notifications_enabled: value });
 
     if (value) {
-      // Pass current times directly to avoid stale state
+      // Pass current notificationTimes directly to avoid stale state
       await scheduleAllNotifications(notificationTimes);
     } else {
       await Notifications.cancelAllScheduledNotificationsAsync();
+      console.log('[Settings] All notifications cancelled');
     }
   };
 
   const scheduleAllNotifications = async (timesToSchedule?: NotificationTime[]) => {
     if (!Notifications) {
-      console.log('[Notifications] Module not available, skipping schedule');
+      console.log('[Settings] Notifications module not available, skipping schedule');
       return;
     }
 
     const times = timesToSchedule || notificationTimes;
 
-    // Cancel existing notifications
+    // Cancel all existing scheduled notifications
     await Notifications.cancelAllScheduledNotificationsAsync();
-    console.log('[Notifications] Cancelled all existing notifications');
+    console.log('[Settings] Cancelled all existing notifications');
 
-    // Schedule all enabled notification times
+    // Schedule each enabled notification time
     for (const notifTime of times) {
       if (notifTime.enabled) {
         const [hour, minute] = notifTime.time.split(':').map(Number);
 
         try {
-          const trigger: any = {
-            type: Notifications.SchedulableTriggerInputTypes?.DAILY ?? 'daily',
-            hour,
-            minute,
-          };
-
-          // Add channelId to trigger for Android
-          if (Platform.OS === 'android') {
-            trigger.channelId = 'daily-reminders';
-          }
-
           const id = await Notifications.scheduleNotificationAsync({
             content: {
               title: `${notifTime.label} Reminder ✨`,
               body: 'Time for your daily affirmations practice!',
               sound: 'default',
-              priority: Platform.OS === 'android'
-                ? (Notifications.AndroidNotificationPriority?.HIGH ?? 'high')
-                : undefined,
+              ...(Platform.OS === 'android' && {
+                priority: Notifications.AndroidNotificationPriority?.HIGH ?? 'high',
+              }),
             },
-            trigger,
+            trigger: {
+              type: 'daily',
+              hour,
+              minute,
+              // CRITICAL: channelId is REQUIRED on Android or notification is silently dropped
+              ...(Platform.OS === 'android' && { channelId: 'daily-reminders' }),
+            },
           });
 
-          console.log(`[Notifications] Scheduled "${notifTime.label}" at ${hour}:${minute}, id: ${id}`);
+          console.log(`[Settings] Scheduled "${notifTime.label}" at ${hour}:${String(minute).padStart(2, '0')}, id: ${id}`);
         } catch (error) {
-          console.error(`[Notifications] Failed to schedule "${notifTime.label}":`, error);
+          console.error(`[Settings] Failed to schedule "${notifTime.label}":`, error);
         }
       }
     }
 
-    // Log all scheduled notifications for debugging
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    console.log(`[Notifications] Total scheduled: ${scheduled.length}`, JSON.stringify(scheduled, null, 2));
+    // Debug: log all scheduled notifications
+    try {
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      console.log(`[Settings] Total scheduled notifications: ${scheduled.length}`);
+      scheduled.forEach((n: any, i: number) => {
+        console.log(`  [${i}] id=${n.identifier}, trigger=`, JSON.stringify(n.trigger));
+      });
+    } catch (e) {
+      console.log('[Settings] Could not list scheduled notifications:', e);
+    }
   };
 
   const handleToggleNotificationTime = async (id: string) => {
@@ -162,6 +169,7 @@ export default function SettingsScreen() {
     await updateSettings({ notification_times: updatedTimes });
 
     if (notificationsEnabled) {
+      // Pass updated times directly — don't rely on setState which is async
       await scheduleAllNotifications(updatedTimes);
     }
   };
@@ -202,7 +210,7 @@ export default function SettingsScreen() {
     const newNotification: NotificationTime = {
       id: `notif_${Date.now()}`,
       time: timeString,
-      label: newLabel,
+      label: newLabel.trim(),
       enabled: true,
     };
 
