@@ -15,7 +15,7 @@ export default function RootLayout() {
           return;
         }
 
-        // CRITICAL: Set notification handler FIRST — without this, foreground notifications are suppressed
+        // Set notification handler — controls foreground behavior
         Notifications.setNotificationHandler({
           handleNotification: async () => ({
             shouldShowAlert: true,
@@ -27,16 +27,27 @@ export default function RootLayout() {
         });
         console.log('[RootLayout] Notification handler set');
 
-        // CRITICAL: Create Android notification channel (required for Android 8+)
-        // Without this, notifications are silently dropped
+        // Create Android notification channel
         if (Platform.OS === 'android') {
+          // Delete old channel if it exists (to reset any bad config)
+          try {
+            await Notifications.deleteNotificationChannelAsync('daily-reminders');
+          } catch (e) {
+            // Channel didn't exist, that's fine
+          }
+
           await Notifications.setNotificationChannelAsync('daily-reminders', {
             name: 'Daily Reminders',
+            description: 'Reminders for your daily affirmation practice',
             importance: Notifications.AndroidImportance.HIGH,
             vibrationPattern: [0, 250, 250, 250],
             sound: 'default',
             enableVibrate: true,
             showBadge: true,
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility?.PUBLIC,
+            bypassDnd: false,
+            enableLights: true,
+            lightColor: '#9370DB',
           });
           console.log('[RootLayout] Android notification channel "daily-reminders" created');
         }

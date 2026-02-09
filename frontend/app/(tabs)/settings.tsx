@@ -98,7 +98,6 @@ export default function SettingsScreen() {
     await updateSettings({ notifications_enabled: value });
 
     if (value) {
-      // Pass current notificationTimes directly to avoid stale state
       await scheduleAllNotifications(notificationTimes);
     } else {
       await Notifications.cancelAllScheduledNotificationsAsync();
@@ -124,22 +123,33 @@ export default function SettingsScreen() {
         const [hour, minute] = notifTime.time.split(':').map(Number);
 
         try {
+          const notificationContent: any = {
+            title: notifTime.label,
+            body: 'Time for your daily affirmations practice! ✨',
+            sound: 'default',
+            sticky: false,
+            autoDismiss: true,
+          };
+
+          // Android-specific content settings
+          if (Platform.OS === 'android') {
+            notificationContent.priority = Notifications.AndroidNotificationPriority?.MAX ?? 'max';
+          }
+
+          const trigger: any = {
+            hour,
+            minute,
+            repeats: true,
+          };
+
+          // Android-specific trigger settings
+          if (Platform.OS === 'android') {
+            trigger.channelId = 'daily-reminders';
+          }
+
           const id = await Notifications.scheduleNotificationAsync({
-            content: {
-              title: `${notifTime.label} Reminder ✨`,
-              body: 'Time for your daily affirmations practice!',
-              sound: 'default',
-              ...(Platform.OS === 'android' && {
-                priority: Notifications.AndroidNotificationPriority?.HIGH ?? 'high',
-              }),
-            },
-            trigger: {
-              type: 'daily',
-              hour,
-              minute,
-              // CRITICAL: channelId is REQUIRED on Android or notification is silently dropped
-              ...(Platform.OS === 'android' && { channelId: 'daily-reminders' }),
-            },
+            content: notificationContent,
+            trigger,
           });
 
           console.log(`[Settings] Scheduled "${notifTime.label}" at ${hour}:${String(minute).padStart(2, '0')}, id: ${id}`);
@@ -154,7 +164,7 @@ export default function SettingsScreen() {
       const scheduled = await Notifications.getAllScheduledNotificationsAsync();
       console.log(`[Settings] Total scheduled notifications: ${scheduled.length}`);
       scheduled.forEach((n: any, i: number) => {
-        console.log(`  [${i}] id=${n.identifier}, trigger=`, JSON.stringify(n.trigger));
+        console.log(`  [${i}] id=${n.identifier}, content=`, JSON.stringify(n.content), 'trigger=', JSON.stringify(n.trigger));
       });
     } catch (e) {
       console.log('[Settings] Could not list scheduled notifications:', e);
@@ -169,7 +179,6 @@ export default function SettingsScreen() {
     await updateSettings({ notification_times: updatedTimes });
 
     if (notificationsEnabled) {
-      // Pass updated times directly — don't rely on setState which is async
       await scheduleAllNotifications(updatedTimes);
     }
   };
